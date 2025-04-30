@@ -13,7 +13,8 @@ import { appConfig } from '../../app.config';
 
 const AWS_BUCKET_NAME = "app-template-1252343"
 // Constants
-const APP_FOLDER_PREFIX = appConfig.appName.replace(/\s/g, '_') + '/'
+// const APP_FOLDER_PREFIX = appConfig.appName.replace(/\s/g, '_') + '/'
+const APP_FOLDER_PREFIX = ''
 
 // S3 Configuration
 export interface S3Config {
@@ -151,13 +152,14 @@ export const listFiles = async (
     ? `${APP_FOLDER_PREFIX}${prefix}`
     : APP_FOLDER_PREFIX;
 
+
   // First, get all objects to count files in folders and calculate total sizes
   const allObjectsCommand = new ListObjectsV2Command({
     Bucket: bucketName,
-    Prefix: fullPrefix,
   });
 
   const allObjectsResponse = await client.send(allObjectsCommand);
+
 
   // Create maps to track folder stats
   const folderCounts: Record<string, number> = {};
