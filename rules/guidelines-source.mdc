@@ -1,0 +1,32 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Project Guidelines Location
+
+**Always consult the `app-guildelines` directory as the primary source for all project-specific rules, guidelines, and conventions.**
+ALWAYS use the app guidelines when creating a new page or api.
+This directory contains detailed documentation covering various aspects of the project, including:
+
+*   General Code Standards: [general-code-guidelines.md](mdc:app-guildelines/general-code-guidelines.md)
+*   TypeScript Usage: [Typescript-guildelines.md](mdc:app-guildelines/Typescript-guildelines.md)
+*   React Components: [React-components-guidelines.md](mdc:app-guildelines/React-components-guidelines.md)
+*   Next.js Specifics: [nextjs-guidelines.md](mdc:app-guildelines/nextjs-guidelines.md)
+*   Client-Server Communication: [client-server-communications.md](mdc:app-guildelines/client-server-communications.md)
+*   Pages and Routing: [pages-and-routing-guidelines.md](mdc:app-guildelines/pages-and-routing-guidelines.md)
+*   AI Models API Usage: [ai-models-api-usage.md](mdc:app-guildelines/ai-models-api-usage.md)
+*   Task Completion Checklist: [tasks-guidelines.md](mdc:app-guildelines/tasks-guidelines.md)
+
+Refer to these documents *before* implementing new features or making significant changes to ensure consistency and adherence to project standards.
+for the complete Guidelines, see the app-guildelines directory.
+
+This is an SPA Web App with Next.js.
+NEVER add new pages to /pages folder
+NEVER add new apis to /pages/api folder.
+
+Guidelines for performing tasks:
+* Always follow the App Guidelines in app-guildelines directory.
+* Always run typescript and lint (`yarn checks`) checks before completing the task.
+* Always verify that the code you added comply with all the rules and guidelines in the app-guildelines.
+

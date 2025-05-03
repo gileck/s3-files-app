@@ -4,6 +4,7 @@ import { AIChat } from './AIChat';
 import { Settings } from './Settings';
 import { FileManager } from './FileManager';
 import { AIMonitoring } from './AIMonitoring';
+import { MongoDb } from './MongoDb';
 import { createRoutes } from '../router';
 
 // Define routes
@@ -13,5 +14,7 @@ export const routes = createRoutes({
   '/settings': Settings,
   '/file-manager': FileManager,
   '/ai-monitoring': AIMonitoring,
+  '/mongodb': MongoDb,
+  '/mongodb/:collection': MongoDb,
   '/not-found': NotFound,
 });

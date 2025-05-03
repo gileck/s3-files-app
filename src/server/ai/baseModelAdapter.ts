@@ -16,7 +16,7 @@ export class AIModelAdapter implements AIModelBaseAdapter {
   modelId: string;
   modelDefinition: AIModelDefinition;
   modelAdapter: AIModel;
-  
+
   constructor(modelId: string) {
     this.modelId = modelId;
     this.modelDefinition = getModelById(modelId);
@@ -29,30 +29,30 @@ export class AIModelAdapter implements AIModelBaseAdapter {
     const totalCost = inputCost + outputCost;
     return { totalCost };
   }
-  
+
   /**
    * Estimate cost based on input text and expected output
    * Uses common logic but delegates model-specific details to the specific adapter
    */
   estimateCost(
-    prompt: string, 
+    prompt: string,
     expectedOutputTokens?: number
   ): AIModelCostEstimate {
-    
+
     // Count input tokens using the appropriate tokenizer
     const promptTokens = countTokens(prompt, this.modelDefinition.provider, this.modelId);
-    
+
     // Calculate input cost based on actual token count
     const inputCost = (promptTokens / 1000) * getPricePer1K(this.modelId, promptTokens).inputCost;
-    
+
     // Calculate output cost based on expected output tokens (if provided)
     const outputTokens = expectedOutputTokens || Math.ceil(promptTokens / 2); // Estimate output tokens if not provided
     const outputCost = (outputTokens / 1000) * getPricePer1K(this.modelId, outputTokens).outputCost;
-    
+
     const totalCost = inputCost + outputCost;
     return { totalCost };
   }
-  
+
   /**
    * Process a prompt and return plain text
    * Handles caching and cost tracking, delegating the actual API call to the specific adapter
@@ -64,7 +64,7 @@ export class AIModelAdapter implements AIModelBaseAdapter {
 
     const response = await this.modelAdapter.processPromptToText(prompt, this.modelId);
     const cost = this.calculateCost(response.usage);
-    
+
     // Track AI usage
     try {
       await addAIUsageRecord(
@@ -78,7 +78,7 @@ export class AIModelAdapter implements AIModelBaseAdapter {
       console.error('Error tracking AI usage:', error);
       // Continue even if tracking fails
     }
-    
+
     return {
       result: response.result,
       usage: response.usage,
@@ -97,7 +97,7 @@ export class AIModelAdapter implements AIModelBaseAdapter {
 
     const response = await this.modelAdapter.processPromptToJSON<T>(prompt, this.modelId);
     const cost = this.calculateCost(response.usage);
-    
+
     // Track AI usage
     try {
       await addAIUsageRecord(
@@ -111,7 +111,7 @@ export class AIModelAdapter implements AIModelBaseAdapter {
       console.error('Error tracking AI usage:', error);
       // Continue even if tracking fails
     }
-    
+
     return {
       result: response.result,
       usage: response.usage,

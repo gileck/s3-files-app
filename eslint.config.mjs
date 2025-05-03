@@ -14,10 +14,10 @@ const restrictApiRoutesRule = {
   create(context) {
     // Get the filename of the current file being linted
     const filename = context.getFilename();
-    
+
     // Check if the file is under /src/pages/api/ but not process.ts
     if (
-      filename.includes('/src/pages/api/') && 
+      filename.includes('/src/pages/api/') &&
       !filename.endsWith('/src/pages/api/process.ts') &&
       !filename.endsWith('\\src\\pages\\api\\process.ts') // For Windows paths
     ) {
@@ -27,7 +27,7 @@ const restrictApiRoutesRule = {
         message: 'API routes should not be added directly under /src/pages/api/. Use the centralized API architecture pattern instead.',
       });
     }
-    
+
     return {};
   }
 };
