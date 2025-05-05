@@ -22,10 +22,12 @@ This project uses a simplified client-server communication pattern with a single
 
 ## Creating a New API Endpoint
 
-1. **Define Shared Types** (`/src/apis/<domain>/types.ts`):
+1. **Define ALL Domain Types in types.ts** (`/src/apis/<domain>/types.ts`):
    - Define request and response types
    - Keep types simple and focused on the specific domain
    - **IMPORTANT: These types MUST be used consistently across client.ts and server.ts**
+   - **CRITICAL: ALL domain-related types MUST be defined in types.ts and imported from there**
+   - **NEVER duplicate or redefine types in React components or other files**
    - Example:
      ```typescript
      export type ChatRequest = {
@@ -42,17 +44,54 @@ This project uses a simplified client-server communication pattern with a single
      };
      ```
 
+   ### ✅ CORRECT: Import types from the domain's types.ts file
+   ```typescript
+   // In a React component
+   import { ChatRequest, ChatResponse } from "@/apis/chat/types";
+   
+   const ChatComponent = () => {
+     const [request, setRequest] = useState<ChatRequest>({
+       modelId: "gpt-4",
+       text: ""
+     });
+     
+     // Use the imported types
+     // ...
+   };
+   ```
+
+   ### ❌ INCORRECT: Redefining types in React components
+   ```typescript
+   // In a React component - DON'T DO THIS
+   
+   // DON'T redefine types that should come from the API domain
+   type ChatRequestType = { // WRONG: Duplicating the API type
+     modelId: string;
+     text: string;
+   };
+   
+   const ChatComponent = () => {
+     const [request, setRequest] = useState<ChatRequestType>({
+       modelId: "gpt-4",
+       text: ""
+     });
+     
+     // Using the duplicated type
+     // ...
+     };
+     ```
+
 2. **Implement Server Logic** (`/src/apis/<domain>/server.ts`):
    - Create a `process` function that handles the request and returns a response
    - **IMPORTANT: ALL business logic MUST be implemented here**
    - Handle all business logic, validation, error cases, and external API calls here
    - **MUST use the shared types for both input parameters and return values**
    - **NEVER import any client-side code or client.ts functions here**
-   - **MUST export the API name from index.ts**
+   - **IMPORTANT: MUST re-export the API name from index.ts**
    - Example:
      ```typescript
      import { ChatRequest, ChatResponse } from "./types";
-     export { name } from './index';
+     export { name } from './index'; // Re-export the API name from index.ts
 
      // Must use ChatRequest as input type and ChatResponse as return type
      export const process = async (request: ChatRequest): Promise<ChatResponse> => {
@@ -90,12 +129,12 @@ This project uses a simplified client-server communication pattern with a single
    - **MUST use the exact same types for input parameters and return values as server.ts**
    - **NEVER import any server-side code or server.ts functions here**
    - **ALWAYS wrap the response type with CacheResult<T> to handle caching metadata**
-   - **MUST import the API name from index.ts**
+   - **IMPORTANT: MUST import the API name from index.ts, NEVER from server.ts**
    - Example:
      ```typescript
      import { ChatRequest, ChatResponse } from "./types";
      import apiClient from "../../clientUtils/apiClient";
-     import { name } from "./index";
+     import { name } from "./index"; // Always import from index.ts, never from server.ts
      import type { CacheResult } from "@/serverUtils/cache/types";
 
      // The return type must include CacheResult wrapper since caching is applied automatically
@@ -139,27 +178,31 @@ This project uses a simplified client-server communication pattern with a single
 
 When a domain needs to expose multiple API routes (e.g., search and details), follow these guidelines:
 
-1. **Define a Base Namespace in index.ts**:
+1. **Define All API Names in index.ts**:
    ```typescript
    // src/apis/books/index.ts
    export * from './types';
-   export const name = "books"; // Base namespace
+   
+   // Base namespace
+   export const name = "books"; 
+   
+   // All API endpoint names MUST be defined here
+   export const searchApiName = `${name}/search`;
+   export const detailsApiName = `${name}/details`;
    ```
 
-2. **Export Full API Names from server.ts**:
-   - Define and export the full API endpoint names using the base namespace
+2. **Re-export API Names from server.ts**:
+   - Re-export the API names from index.ts
    - Create separate handler functions for each endpoint
    - Example:
    ```typescript
    // src/apis/books/server.ts
-   import { name } from './index';
+   import { BookSearchRequest, BookSearchResponse, BookDetailsRequest, BookDetailsResponse } from './types';
+   // Import all API names from index.ts
+   import { name, searchApiName, detailsApiName } from './index';
    
-   // Full API endpoint names
-   export const searchApiName = `${name}/search`;
-   export const detailsApiName = `${name}/details`;
-   
-   // Export the name for backwards compatibility
-   export { name };
+   // Re-export all API names - this pattern is crucial
+   export { name, searchApiName, detailsApiName };
    
    // Search books endpoint
    export const searchBooks = async (request: BookSearchRequest): Promise<BookSearchResponse> => {
@@ -172,10 +215,14 @@ When a domain needs to expose multiple API routes (e.g., search and details), fo
    };
    ```
 
-3. **Import Full API Names in client.ts**:
+3. **Import API Names in client.ts FROM INDEX.TS, NOT server.ts**:
    ```typescript
    // src/apis/books/client.ts
-   import { searchApiName, detailsApiName } from "./server";
+   import { BookSearchRequest, BookSearchResponse, BookDetailsRequest, BookDetailsResponse } from './types';
+   import apiClient from "../../clientUtils/apiClient";
+   // IMPORTANT: Always import API names from index.ts, NEVER from server.ts
+   import { searchApiName, detailsApiName } from "./index";
+   import type { CacheResult } from "@/serverUtils/cache/types";
    
    // Client function to call the book search API
    export const searchBooks = async (request: BookSearchRequest): Promise<CacheResult<BookSearchResponse>> => {
@@ -197,14 +244,14 @@ When a domain needs to expose multiple API routes (e.g., search and details), fo
 4. **Register Multiple Endpoints in apis.ts**:
    ```typescript
    // src/apis/apis.ts
-   import * as books from "./books/server";
+   import * as books from "./books/server"; // Import from server.ts to get both API names and handlers
    
    export const apiHandlers: ApiHandlers = {
      // Other API handlers...
-     [books.searchApiName]: { 
+     [books.searchApiName]: { // API names are re-exported from server.ts
        process: (params: unknown) => books.searchBooks(params as BookSearchRequest) 
      },
-     [books.detailsApiName]: { 
+     [books.detailsApiName]: { // API names are re-exported from server.ts
        process: (params: unknown) => books.getBookById(params as BookDetailsRequest) 
      },
    };
@@ -216,6 +263,13 @@ This approach provides several benefits:
 - Type safety for each endpoint's request and response
 - Separation of concerns with dedicated handler functions
 - Consistent client-side access pattern
+
+**CRITICAL: The client code must NEVER import directly from server.ts**
+- API names MUST be defined in index.ts
+- Server.ts MUST re-export API names from index.ts 
+- Client.ts MUST import API names from index.ts
+- This pattern ensures client code never imports server code directly
+- Importing server code directly in client code will BREAK the application
 
 ## Using the API from Client Components
 
@@ -245,13 +299,14 @@ const handleSubmit = async () => {
    - All API requests go through the single /api/process endpoint
    - The central processApiCall.ts handles routing to the correct API handler
 
-2. **API Registration**:
+2. **API Registration and Naming Flow**:
    - **ALWAYS register new APIs in apis.ts by importing directly from server.ts**
-   - The API name must be consistent across:
-     - The name export in index.ts
-     - The name import in server.ts
-     - The key in the apiHandlers object in apis.ts
-     - The name parameter in apiClient.call() in client.ts
+   - The API name flow MUST follow this pattern:
+     1. DEFINE API names in index.ts
+     2. IMPORT and RE-EXPORT API names in server.ts from index.ts
+     3. IMPORT API names in apis.ts from server.ts
+     4. IMPORT API names in client.ts from index.ts (NEVER from server.ts)
+   - This pattern ensures client code never imports server code directly
 
 3. **Client Access**:
    - **NEVER call apiClient directly from components or pages**
@@ -281,6 +336,9 @@ const handleSubmit = async () => {
    - The client.ts function MUST use the exact same parameter types as server.ts
    - The return type in client.ts should be CacheResult<ResponseType>
    - Never use `any` as a type
+   - **ALWAYS define domain-related types in types.ts and import them where needed**
+   - **NEVER duplicate types in components or other files**
+   - **NEVER create similar but slightly different versions of the same type**
 
 7. **Separation of Concerns**:
    - **NEVER import server.ts in client-side code**

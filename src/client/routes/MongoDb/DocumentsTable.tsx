@@ -97,7 +97,7 @@ export const DocumentsTable = ({
         if (!documents || documents.length === 0) return [];
 
         const firstDoc = documents[0];
-        const fields = Object.keys(firstDoc).filter(key => key !== '_id');
+        const fields = Object.keys(firstDoc);
 
         // Limit to first 10 fields to avoid overwhelming the table
         return fields.slice(0, 10);
