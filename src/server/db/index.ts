@@ -1,69 +1,47 @@
-import { MongoClient, Db, Collection, Document, ListCollectionsOptions } from 'mongodb';
+import { Db, Collection, Document, ListCollectionsOptions } from 'mongodb';
+import { dbContext } from './context';
+import { MongoClient } from 'mongodb';
+import { appConfig } from '@/app.config'; // Assuming appConfig provides default DB name
 
-let client: MongoClient | null = null;
-let db: Db | null = null;
-let isConnecting = false;
-let connectionPromise: Promise<Db> | null = null;
-
-export async function connectToDatabase(): Promise<Db> {
-    if (db) return db;
-
-    if (connectionPromise) return connectionPromise;
-
-    if (isConnecting) {
-        return new Promise((resolve) => {
-            const interval = setInterval(() => {
-                if (db) {
-                    clearInterval(interval);
-                    resolve(db);
-                }
-            }, 100);
-        });
-    }
-
-    isConnecting = true;
-
-    connectionPromise = new Promise(async (resolve, reject) => {
-        try {
-            const uri = process.env.MONGO_URI || "mongodb+srv://gileck:EdzaigZENXq1tkmT@cluster0.yepuugh.mongodb.net/trainingPlanDb?retryWrites=true&w=majority&appName=Cluster0";
-
-            // console.log('MongoDB URI:', uri);
-
-            if (!uri) {
-                throw new Error('MONGO_URI environment variable is not defined');
-            }
-
-            client = new MongoClient(uri);
-            await client.connect();
-            db = client.db("trainingPlanDb");
-
-            console.log('Connected to MongoDB:', db.databaseName);
-            isConnecting = false;
-            resolve(db);
-        } catch (error) {
-            isConnecting = false;
-            connectionPromise = null;
-            console.error('MongoDB connection error:', error);
-            reject(error);
-        }
-    });
-
-    return connectionPromise;
+const MONGO_URI = process.env.MONGO_URI;
+if (!MONGO_URI) {
+    throw new Error('Please define the MONGO_URI environment variable');
 }
 
-export async function getCollection<T extends Document = Document>(collectionName: string): Promise<Collection<T>> {
-    const db = await connectToDatabase();
+const client = new MongoClient(MONGO_URI);
+
+// Internal function for establishing a raw database connection
+async function _establishConnection(dbName?: string): Promise<Db> {
+    await client.connect();
+    return client.db(dbName);
+}
+
+// Export the internal function with a specific name for context.ts to import
+export { _establishConnection as connectToDatabaseClient };
+
+export async function connectToDatabase(dbName?: string): Promise<Db> {
+    return dbContext.useDatabase(dbName);
+}
+
+export async function getCollection<T extends Document = Document>(collectionName: string, dbName?: string): Promise<Collection<T>> {
+    const db = await connectToDatabase(dbName);
     return db.collection<T>(collectionName);
 }
 
-export async function listCollections(options: ListCollectionsOptions = {}): Promise<string[]> {
-    const db = await connectToDatabase();
+export async function listCollections(dbName: string, options: ListCollectionsOptions = {}): Promise<string[]> {
+    const db = await connectToDatabase(dbName);
 
     // Log info about the database
     console.log('Listing collections from database:', db.databaseName);
 
-    // Include system collections for debugging
-    const collections = await db.listCollections(undefined, options).toArray();
+    // Include all collections including system collections
+    const enhancedOptions = {
+        ...options,
+        nameOnly: true,
+        authorizedCollections: true
+    };
+
+    const collections = await db.listCollections(undefined, enhancedOptions).toArray();
     console.log('Raw collections list:', collections);
 
     const collectionNames = collections.map(collection => collection.name);
@@ -72,11 +50,23 @@ export async function listCollections(options: ListCollectionsOptions = {}): Pro
     return collectionNames;
 }
 
-export async function closeConnection(): Promise<void> {
-    if (client) {
-        await client.close();
-        client = null;
-        db = null;
-        connectionPromise = null;
+export async function listDatabases(): Promise<string[]> {
+    try {
+        const adminDb = client.db('admin');
+        const databasesList = await adminDb.admin().listDatabases();
+
+        // Filter out admin, local, and config databases
+        const filteredDatabases = databasesList.databases
+            .filter(db => !['admin', 'local', 'config'].includes(db.name))
+            .map(db => db.name);
+
+        return filteredDatabases;
+    } catch (error) {
+        console.error('Error listing databases:', error);
+        throw error;
     }
+}
+
+export async function closeConnection(): Promise<void> {
+    await dbContext.reset();
 } 

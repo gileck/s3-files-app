@@ -1,4 +1,3 @@
-
 export const apiClient = {
   /**
    * Make a POST request to an API endpoint
@@ -7,9 +6,9 @@ export const apiClient = {
    * @param options Additional request options
    * @returns Promise with the typed response
    */
-  call: async <ResponseType, Params = Record<string, string | number | boolean | undefined | null>>(
+  call: async <ResponseType>(
     name: string,
-    params?: Params,
+    params?: any,
     options?: ApiOptions
   ): Promise<ResponseType> => {
     const response = await fetch('/api/process', {
@@ -17,11 +16,11 @@ export const apiClient = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
-        name, 
+      body: JSON.stringify({
+        name,
         params,
         options
-       }),
+      }),
     });
 
     if (!response.ok) {

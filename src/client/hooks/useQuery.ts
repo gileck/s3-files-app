@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { executeQuery } from '../../apis/mongodb/client';
+import { runQuery } from '../../apis/mongodb/client';
 import { WithId, Document } from 'mongodb';
 
 export function useQuery() {
@@ -8,7 +8,7 @@ export function useQuery() {
     const [error, setError] = useState<Error | null>(null);
 
     // Use useCallback to memoize the runQuery function to prevent infinite loop
-    const runQuery = useCallback(async (collection: string, query: string) => {
+    const executeQuery = useCallback(async (collection: string, query: string, database?: string) => {
         if (!collection || !query) {
             setError(new Error('Collection and query are required'));
             return;
@@ -32,10 +32,11 @@ export function useQuery() {
                 throw new Error(`Invalid query format: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
             }
 
-            const response = await executeQuery({
+            const response = await runQuery(
                 collection,
-                query
-            });
+                query,
+                database
+            );
 
             if (response.data.error) {
                 throw new Error(response.data.error);
@@ -59,6 +60,6 @@ export function useQuery() {
         results,
         loading,
         error,
-        runQuery
+        runQuery: executeQuery
     };
 } 

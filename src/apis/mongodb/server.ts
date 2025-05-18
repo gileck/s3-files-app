@@ -1,28 +1,49 @@
 import {
     /* CollectionsRequest, */ CollectionsResponse, DocumentsRequest, DocumentsResponse,
     ModifyDocumentRequest, ModifyDocumentResponse, QueryRequest, QueryResponse,
-    StatsRequest, StatsResponse, AIQueryRequest, AIQueryResponse
+    StatsRequest, StatsResponse, AIQueryRequest, AIQueryResponse, DatabasesResponse
 } from './types';
-import { collectionsApiName, documentsApiName, modifyDocumentApiName, queryApiName, statsApiName, aiQueryApiName, name } from './index';
-import { listCollections, connectToDatabase } from '../../server/db';
+import { databasesApiName, collectionsApiName, documentsApiName, modifyDocumentApiName, queryApiName, statsApiName, aiQueryApiName, name } from './index';
+import { listCollections, listDatabases } from '../../server/db';
 import { findDocuments, findDocument, insertDocument, updateDocument, deleteDocument, deleteAllDocuments, countDocuments, executeQuery, getCollectionStats } from '../../server/db/operations';
 import { ObjectId, Document, Filter } from 'mongodb';
 import { AIModelAdapter } from '../../server/ai/baseModelAdapter';
+import { dbContext, connectToDatabase } from '../../server/db/context';
 
 // Export API names
-export { name, collectionsApiName, documentsApiName, modifyDocumentApiName, queryApiName, statsApiName, aiQueryApiName };
+export { name, databasesApiName, collectionsApiName, documentsApiName, modifyDocumentApiName, queryApiName, statsApiName, aiQueryApiName };
+
+// Databases API
+export const getDatabases = async (): Promise<DatabasesResponse> => {
+    try {
+        console.log('API: Getting databases...');
+        const databases = await listDatabases();
+        console.log('Returning databases to client:', databases);
+        return { databases };
+    } catch (error) {
+        console.error('Error fetching databases:', error);
+        return {
+            databases: [],
+            error: `Failed to fetch databases: ${error instanceof Error ? error.message : String(error)}`
+        };
+    }
+};
 
 // Collections API
-export const getCollections = async (): Promise<CollectionsResponse> => {
+export const getCollections = async (database?: string): Promise<CollectionsResponse> => {
     try {
-        console.log('API: Getting collections...');
+        console.log('API: Getting collections...', database ? `for database: ${database}` : '(No database specified)');
 
-        // Get the connected database instance for additional info
-        const db = await connectToDatabase();
-        console.log('Connected database name:', db.databaseName);
+        if (!database) {
+            console.error('Error: Database name not provided to getCollections API.');
+            return {
+                collections: [],
+                error: 'Database name must be provided to list collections.'
+            };
+        }
 
-        // Try listing all collections including system collections
-        const collections = await listCollections({
+
+        const collections = await listCollections(database, {
             nameOnly: false,
             authorizedCollections: false
         });
@@ -41,196 +62,144 @@ export const getCollections = async (): Promise<CollectionsResponse> => {
 // Documents API
 export const getDocuments = async (request: DocumentsRequest): Promise<DocumentsResponse> => {
     try {
-        const { collection, limit = 100, skip = 0, query = {}, id } = request;
+        const { collection, limit = 100, skip = 0, query = {}, id, database, documentId } = request;
 
-        if (id) {
+        // console.log('API: getDocuments called with params:', { collection, limit, skip, query: JSON.stringify(query), id, documentId, database });
+
+        // No longer need to set context here if operations always receive 'database' param
+        // if (database) {
+        //     await connectToDatabase(database);
+        //     // console.log('Switched to database context:', database);
+        // }
+
+        if (id || documentId) {
+            const docId = id || documentId;
             try {
-                const document = await findDocument(collection, { _id: new ObjectId(id) });
-
+                // console.log(`Finding document with ID ${docId} in collection ${collection} using DB: ${database}`);
+                const document = await findDocument(collection, { _id: new ObjectId(docId) }, database);
                 if (!document) {
                     return { error: 'Document not found' };
                 }
-
                 return { document };
-            } catch (fetchError) {
-                console.error('Invalid document ID error:', fetchError);
-                return { error: 'Invalid document ID' };
+            } catch (fetchError: any) {
+                // console.error('Invalid document ID error:', fetchError);
+                return { error: `Invalid document ID or query error: ${fetchError.message}` };
             }
         }
 
-        const documents = await findDocuments(collection, query as Filter<Document>, {
-            limit,
-            skip
-        });
-
-        const total = await countDocuments(collection, query as Filter<Document>);
+        // console.log(`Finding documents in collection ${collection} with query: ${JSON.stringify(query)} using DB: ${database}`);
+        const documents = await findDocuments(collection, query as Filter<Document>, { limit, skip }, database);
+        const total = await countDocuments(collection, query as Filter<Document>, database);
 
         return {
             documents,
-            pagination: {
-                total,
-                limit,
-                skip
-            }
+            pagination: { total, limit, skip }
         };
-    } catch (error) {
-        console.error('Error fetching documents:', error);
-        return {
-            error: `Failed to fetch documents: ${error instanceof Error ? error.message : String(error)}`
-        };
+    } catch (error: any) {
+        // console.error('Error fetching documents:', error);
+        return { error: `Failed to fetch documents: ${error.message}` };
     }
 };
 
 // Modify Document API
 export const modifyDocument = async (request: ModifyDocumentRequest): Promise<ModifyDocumentResponse> => {
     try {
-        const { collection, id, document } = request;
+        const { collection, id, document, database } = request;
 
-        // Check for delete operations
+        // No longer need to set context here if operations always receive 'database' param
+        // if (database) {
+        //     await connectToDatabase(database);
+        // }
+
         if (document._delete === true && id) {
-            // Delete a single document
             try {
-                console.log(`Deleting document with ID ${id} from collection ${collection}`);
-                const success = await deleteDocument(collection, new ObjectId(id));
-
-                if (!success) {
-                    return { success: false, error: 'Document not found or delete failed' };
-                }
-
+                const success = await deleteDocument(collection, new ObjectId(id), {}, database);
+                if (!success) return { success: false, error: 'Document not found or delete failed' };
                 return { success: true };
-            } catch (deleteError) {
-                console.error('Error deleting document:', deleteError);
-                return { success: false, error: 'Failed to delete document' };
+            } catch (deleteError: any) {
+                return { success: false, error: `Failed to delete document: ${deleteError.message}` };
             }
         }
 
-        // Check for delete all operations
         if (document._deleteAll === true) {
-            // Delete all documents in the collection
             try {
-                console.log(`Deleting all documents from collection ${collection}`);
-                const result = await deleteAllDocuments(collection);
-
-                return {
-                    success: true,
-                    deletedCount: result.deletedCount ?? 0
-                };
-            } catch (deleteAllError) {
-                console.error('Error deleting all documents:', deleteAllError);
-                return { success: false, error: 'Failed to delete all documents' };
+                const result = await deleteAllDocuments(collection, {}, database);
+                return { success: true, deletedCount: result.deletedCount ?? 0 };
+            } catch (deleteAllError: any) {
+                return { success: false, error: `Failed to delete all documents: ${deleteAllError.message}` };
             }
         }
 
-        // Handle insert (no id provided)
-        if (!id) {
+        if (!id) { // Insert
             try {
-                console.log(`Inserting new document into collection ${collection}:`, document);
-
-                // Remove any MongoDB specific properties that might cause issues
                 const cleanDoc = { ...document };
-                delete cleanDoc._id;
-                delete cleanDoc._delete;
-                delete cleanDoc._deleteAll;
-
-                const insertedId = await insertDocument(collection, cleanDoc);
-                console.log(`Document inserted with ID: ${insertedId}`);
-
-                if (!insertedId) {
-                    console.error('Insert failed: No insertedId returned');
-                    return { success: false, error: 'Failed to insert document' };
-                }
-
+                delete cleanDoc._id; delete cleanDoc._delete; delete cleanDoc._deleteAll;
+                const insertedId = await insertDocument(collection, cleanDoc, {}, database);
+                if (!insertedId) return { success: false, error: 'Failed to insert document' };
                 return { success: true, insertedId };
-            } catch (insertError) {
-                console.error('Error inserting document:', insertError);
-                return {
-                    success: false,
-                    error: `Failed to insert document: ${insertError instanceof Error ? insertError.message : String(insertError)}`
-                };
+            } catch (insertError: any) {
+                return { success: false, error: `Failed to insert document: ${insertError.message}` };
             }
         }
 
-        // Handle update (id provided)
+        // Update
         try {
-            console.log(`Updating document ${id} in collection ${collection}:`, document);
-            const success = await updateDocument(
-                collection,
-                { _id: new ObjectId(id) },
-                { $set: document }
-            );
+            const cleanUpdateDoc = { ...document }; // Ensure _id, _delete, etc., are not in $set if they were accidentally passed
+            delete cleanUpdateDoc._id; delete cleanUpdateDoc._delete; delete cleanUpdateDoc._deleteAll;
 
-            if (!success) {
-                return { success: false, error: 'Document not found or update failed' };
-            }
-
+            const success = await updateDocument(collection, new ObjectId(id), { $set: cleanUpdateDoc }, {}, database);
+            if (!success) return { success: false, error: 'Document not found or update failed' };
             return { success: true };
-        } catch (updateError) {
-            console.error('Invalid document ID during update:', updateError);
-            return { success: false, error: 'Invalid document ID' };
+        } catch (updateError: any) {
+            return { success: false, error: `Failed to update document: ${updateError.message}` };
         }
-    } catch (error) {
-        console.error('Error modifying document:', error);
-        return {
-            success: false,
-            error: `Failed to modify document: ${error instanceof Error ? error.message : String(error)}`
-        };
+
+    } catch (error: any) {
+        return { success: false, error: `Failed to modify document: ${error.message}` };
     }
 };
 
 // Query API
 export const executeCustomQuery = async (request: QueryRequest): Promise<QueryResponse> => {
     try {
-        const { collection, query } = request;
-
-        if (!query) {
-            return { results: [], error: 'Query is required' };
-        }
-
-        const results = await executeQuery(collection, query);
-
+        const { collection, query, database } = request;
+        // if (database) { await connectToDatabase(database); } // Context setting less critical if passed explicitly
+        if (!query) return { results: [], error: 'Query is required' };
+        const results = await executeQuery(collection, query, database);
         return { results };
-    } catch (error) {
-        console.error('Error executing query:', error);
-        return {
-            results: [],
-            error: `Failed to execute query: ${error instanceof Error ? error.message : String(error)}`
-        };
+    } catch (error: any) {
+        return { results: [], error: `Failed to execute query: ${error.message}` };
     }
 };
 
 // Stats API
 export const getStats = async (request: StatsRequest): Promise<StatsResponse> => {
     try {
-        const { collection } = request;
-
-        const stats = await getCollectionStats(collection);
-
+        const { collection, database } = request;
+        // if (database) { await connectToDatabase(database); } // Context setting less critical if passed explicitly
+        if (!collection) return { stats: {}, error: 'Collection name is required for stats' };
+        const stats = await getCollectionStats(collection, database);
         return { stats };
-    } catch (error) {
-        console.error('Error fetching collection stats:', error);
-        return {
-            stats: {},
-            error: `Failed to fetch collection stats: ${error instanceof Error ? error.message : String(error)}`
-        };
+    } catch (error: any) {
+        return { stats: {}, error: `Failed to fetch collection stats: ${error.message}` };
     }
 };
 
 // AI Query Generation API
 export const generateAIQuery = async (request: AIQueryRequest): Promise<AIQueryResponse> => {
     try {
-        const { collection, naturalLanguageQuery, modelId = 'gemini-1.5-pro' } = request;
+        const { collection, naturalLanguageQuery, modelId = 'gemini-1.5-pro', database } = request;
+        // if (database) { await connectToDatabase(database); } // Context setting less critical
 
-        if (!naturalLanguageQuery) {
-            return { query: '{}', error: 'Natural language query is required' };
-        }
+        if (!naturalLanguageQuery) return { query: '{}', error: 'Natural language query is required' };
+        if (!collection) return { query: '{}', error: 'Collection name is required for AI query' };
 
-        // Get a few example documents from the collection to help the AI understand the structure
         let exampleDocs: Document[] = [];
         try {
-            exampleDocs = await findDocuments(collection, {}, { limit: 5 });
-            console.log(`Retrieved ${exampleDocs.length} example documents for AI context`);
-        } catch (error) {
-            console.warn(`Could not fetch example documents: ${error}`);
+            // findDocuments now takes database as the 4th argument
+            exampleDocs = await findDocuments(collection, {}, { limit: 5 }, database);
+        } catch (error: any) {
+            console.warn(`Could not fetch example documents for AI query: ${error.message}`);
         }
 
         // Format example documents as string

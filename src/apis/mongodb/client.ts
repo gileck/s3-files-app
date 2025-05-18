@@ -1,6 +1,7 @@
 import apiClient from '../../client/utils/apiClient';
-import { collectionsApiName, documentsApiName, modifyDocumentApiName, queryApiName, statsApiName, aiQueryApiName } from './index';
+import { databasesApiName, collectionsApiName, documentsApiName, modifyDocumentApiName, queryApiName, statsApiName, aiQueryApiName } from './index';
 import type {
+    DatabasesResponse,
     CollectionsResponse,
     DocumentsRequest, DocumentsResponse,
     ModifyDocumentRequest, ModifyDocumentResponse,
@@ -10,59 +11,94 @@ import type {
 } from './types';
 import type { CacheResult } from '../../server/cache/types';
 
+// Databases API
+export const fetchDatabases = async (): Promise<CacheResult<DatabasesResponse>> => {
+    return apiClient.call<CacheResult<DatabasesResponse>>(
+        databasesApiName
+    );
+};
+
 // Collections API
-export const fetchCollections = async (): Promise<CacheResult<CollectionsResponse>> => {
+export const fetchCollections = async (database?: string): Promise<CacheResult<CollectionsResponse>> => {
     return apiClient.call<CacheResult<CollectionsResponse>>(
-        collectionsApiName
+        collectionsApiName,
+        { database }
     );
 };
 
 // Documents API
 export const fetchDocuments = async (
-    request: DocumentsRequest
+    collection: string,
+    filterParams: {
+        query?: Record<string, any>;
+        limit?: number;
+        skip?: number;
+    } = {},
+    database?: string
 ): Promise<CacheResult<DocumentsResponse>> => {
-    return apiClient.call<CacheResult<DocumentsResponse>, DocumentsRequest>(
-        documentsApiName,
-        request
-    );
+    const request: DocumentsRequest = {
+        collection,
+        query: filterParams.query || {},
+        limit: filterParams.limit,
+        skip: filterParams.skip,
+        database
+    };
+    return apiClient.call<CacheResult<DocumentsResponse>>(documentsApiName, request);
+};
+
+export const fetchDocument = async (
+    collection: string,
+    documentId: string,
+    database?: string
+): Promise<CacheResult<DocumentsResponse>> => {
+    const request: DocumentsRequest = { collection, documentId, database };
+    return apiClient.call<CacheResult<DocumentsResponse>>(documentsApiName, request);
 };
 
 // Modify Document API
 export const modifyDocument = async (
     request: ModifyDocumentRequest
 ): Promise<CacheResult<ModifyDocumentResponse>> => {
-    return apiClient.call<CacheResult<ModifyDocumentResponse>, ModifyDocumentRequest>(
-        modifyDocumentApiName,
-        request
-    );
+    return apiClient.call<CacheResult<ModifyDocumentResponse>>(modifyDocumentApiName, request);
+};
+
+// Legacy interface for backward compatibility
+export const modifyDocumentLegacy = async (
+    collection: string,
+    action: 'insert' | 'update' | 'delete',
+    document: Record<string, any>,
+    documentId?: string,
+    database?: string
+): Promise<CacheResult<ModifyDocumentResponse>> => {
+    const request: ModifyDocumentRequest = { collection, action, document, documentId, database };
+    return modifyDocument(request);
 };
 
 // Query API
-export const executeQuery = async (
-    request: QueryRequest
+export const runQuery = async (
+    collection: string,
+    query: string,
+    database?: string
 ): Promise<CacheResult<QueryResponse>> => {
-    return apiClient.call<CacheResult<QueryResponse>, QueryRequest>(
-        queryApiName,
-        request
-    );
+    const request: QueryRequest = { collection, query, database };
+    return apiClient.call<CacheResult<QueryResponse>>(queryApiName, request);
 };
 
 // Stats API
-export const fetchStats = async (
-    request: StatsRequest
+export const fetchCollectionStats = async (
+    collection: string,
+    database?: string
 ): Promise<CacheResult<StatsResponse>> => {
-    return apiClient.call<CacheResult<StatsResponse>, StatsRequest>(
-        statsApiName,
-        request
-    );
+    const request: StatsRequest = { collection, database };
+    return apiClient.call<CacheResult<StatsResponse>>(statsApiName, request);
 };
 
 // AI Query API
-export const generateAIQuery = async (
-    request: AIQueryRequest
+export const runAIQuery = async (
+    collection: string,
+    naturalLanguageQuery: string,
+    database?: string
 ): Promise<CacheResult<AIQueryResponse>> => {
-    return apiClient.call<CacheResult<AIQueryResponse>, AIQueryRequest>(
-        aiQueryApiName,
-        request
-    );
+    const request: AIQueryRequest = { collection, naturalLanguageQuery, database };
+    return apiClient.call<CacheResult<AIQueryResponse>>(aiQueryApiName, request);
 }; 

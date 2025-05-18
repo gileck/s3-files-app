@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
-import { fetchDocuments } from '../../apis/mongodb/client';
+import { useState, useEffect, useCallback } from 'react';
+import { fetchDocuments, fetchDocument } from '../../apis/mongodb/client';
 import { DocumentsResponse, DocumentsRequest } from '../../apis/mongodb/types';
 import { Document, WithId } from 'mongodb';
 
 interface UseDocumentsOptions {
     autoFetch?: boolean;
+    database?: string;
 }
 
 export function useDocuments(
     collection: string,
     options: UseDocumentsOptions & Omit<DocumentsRequest, 'collection'> = {}
 ) {
-    const { autoFetch = true, limit = 100, skip = 0, query = {}, id } = options;
+    const { autoFetch = true, limit = 100, skip = 0, query = {}, id, database } = options;
 
     const [documents, setDocuments] = useState<WithId<Document>[] | null>(null);
     const [document, setDocument] = useState<WithId<Document> | null>(null);
@@ -19,20 +20,19 @@ export function useDocuments(
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         if (!collection) return;
 
         try {
             setLoading(true);
             setError(null);
 
-            const response = await fetchDocuments({
-                collection,
-                limit,
-                skip,
-                query,
-                id
-            });
+            let response;
+            if (id) {
+                response = await fetchDocument(collection, id, database);
+            } else {
+                response = await fetchDocuments(collection, query, database);
+            }
 
             if (response.data.error) {
                 throw new Error(response.data.error);
@@ -59,13 +59,13 @@ export function useDocuments(
         } finally {
             setLoading(false);
         }
-    };
+    }, [collection, id, database, JSON.stringify(query), limit, skip]);
 
     useEffect(() => {
         if (autoFetch && collection) {
             fetchData();
         }
-    }, [autoFetch, collection, limit, skip, id, JSON.stringify(query)]);
+    }, [autoFetch, fetchData]);
 
     return {
         documents,

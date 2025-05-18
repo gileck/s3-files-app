@@ -1,6 +1,15 @@
 import { Document, WithId, BSON } from 'mongodb';
 
-export type CollectionsRequest = Record<string, never>;
+export type DatabasesRequest = Record<string, never>;
+
+export type DatabasesResponse = {
+    databases: string[];
+    error?: string;
+};
+
+export type CollectionsRequest = {
+    database?: string;
+};
 
 export type CollectionsResponse = {
     collections: string[];
@@ -13,6 +22,9 @@ export type DocumentsRequest = {
     skip?: number;
     query?: BSON.Document;
     id?: string;
+    filter?: Record<string, any>;
+    documentId?: string;
+    database?: string;
 };
 
 export type DocumentsResponse = {
@@ -30,6 +42,9 @@ export type ModifyDocumentRequest = {
     collection: string;
     id?: string;
     document: Document;
+    action?: 'insert' | 'update' | 'delete';
+    documentId?: string;
+    database?: string;
 };
 
 export type ModifyDocumentResponse = {
@@ -42,6 +57,7 @@ export type ModifyDocumentResponse = {
 export type QueryRequest = {
     collection: string;
     query: string;
+    database?: string;
 };
 
 export type QueryResponse = {
@@ -51,6 +67,7 @@ export type QueryResponse = {
 
 export type StatsRequest = {
     collection: string;
+    database?: string;
 };
 
 export type StatsResponse = {
@@ -59,10 +76,12 @@ export type StatsResponse = {
 };
 
 // Create types for AI-powered query generation
-export interface AIQueryRequest {
+export interface AIQueryRequest extends Record<string, string | undefined> {
     collection: string;
     naturalLanguageQuery: string;
+    query?: string;
     modelId?: string;
+    database?: string;
 }
 
 export interface AIQueryResponse {

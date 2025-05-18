@@ -1,29 +1,28 @@
 import { useState, useEffect } from 'react';
-import { fetchCollections } from '../../apis/mongodb/client';
+import { fetchDatabases } from '../../apis/mongodb/client';
 
-interface UseCollectionsOptions {
+interface UseDatabasesOptions {
     autoFetch?: boolean;
-    database?: string;
 }
 
-export function useCollections(options: UseCollectionsOptions = {}) {
-    const { autoFetch = true, database } = options;
-    const [collections, setCollections] = useState<string[]>([]);
+export function useDatabases(options: UseDatabasesOptions = {}) {
+    const { autoFetch = true } = options;
+    const [databases, setDatabases] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
-    const fetchCollectionsData = async () => {
+    const fetchDatabasesData = async () => {
         try {
             setLoading(true);
             setError(null);
 
-            const response = await fetchCollections(database);
+            const response = await fetchDatabases();
 
             if (response.data.error) {
                 throw new Error(response.data.error);
             }
 
-            setCollections(response.data.collections || []);
+            setDatabases(response.data.databases || []);
         } catch (err) {
             if (err instanceof Error) {
                 setError(err);
@@ -37,14 +36,14 @@ export function useCollections(options: UseCollectionsOptions = {}) {
 
     useEffect(() => {
         if (autoFetch) {
-            fetchCollectionsData();
+            fetchDatabasesData();
         }
-    }, [autoFetch, database]);
+    }, [autoFetch]);
 
     return {
-        collections,
+        databases,
         loading,
         error,
-        fetchCollections: fetchCollectionsData
+        fetchDatabases: fetchDatabasesData
     };
 } 

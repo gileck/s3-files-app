@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { generateAIQuery } from '../../apis/mongodb/client';
+import { runAIQuery } from '../../apis/mongodb/client';
 
 export function useAIQuery() {
     const [query, setQuery] = useState('');
@@ -7,7 +7,7 @@ export function useAIQuery() {
     const [error, setError] = useState<Error | null>(null);
     const [cost, setCost] = useState<{ totalCost: number } | null>(null);
 
-    const generateQuery = async (collection: string, naturalLanguageQuery: string, modelId?: string) => {
+    const generateQuery = async (collection: string, naturalLanguageQuery: string, database?: string, modelId?: string) => {
         if (!collection || !naturalLanguageQuery) return;
 
         try {
@@ -15,11 +15,7 @@ export function useAIQuery() {
             setError(null);
             setCost(null);
 
-            const response = await generateAIQuery({
-                collection,
-                naturalLanguageQuery,
-                modelId
-            });
+            const response = await runAIQuery(collection, naturalLanguageQuery, database);
 
             if (response.data.error) {
                 throw new Error(response.data.error);

@@ -15,6 +15,7 @@ export const routes = createRoutes({
   '/file-manager': FileManager,
   '/ai-monitoring': AIMonitoring,
   '/mongodb': MongoDb,
-  '/mongodb/:collection': MongoDb,
+  '/mongodb/:database': MongoDb,
+  '/mongodb/:database/:collection': MongoDb,
   '/not-found': NotFound,
 });

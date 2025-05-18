@@ -1,0 +1,131 @@
+---
+description: Client-Server Communication Guidelines
+globs: 
+alwaysApply: false
+---
+# Client-Server Communication Guidelines
+
+## Simplified API Architecture
+
+This project uses a simplified client-server communication pattern with a single API endpoint that handles all server-side operations:
+
+```
+/src
+  /apis
+    /apis.ts           - Registry of all API handlers (imports directly from server.ts files)
+    /processApiCall.ts - Central processing logic with caching 
+    /types.ts          - Shared API types
+    /<domain>
+      /types.ts        - Shared types for this domain
+      /server.ts       - Server-side implementation (ALL business logic + exports name)
+      /client.ts       - Client-side function to call the API
+      /index.ts        - Exports name and types ONLY (not process or client functions)
+  /pages
+    /api
+      /process.ts      - Single Next.js API route handler for all requests
+```
+
+## Creating a New API Endpoint
+
+1. **Define ALL Domain Types in types.ts** ([/src/apis/<domain>/types.ts](mdc:src/apis))
+   - Define request and response types
+   - Keep types simple and focused on the specific domain
+   - **IMPORTANT: These types MUST be used consistently across client.ts and server.ts**
+   - **CRITICAL: ALL domain-related types MUST be defined in types.ts and imported from there**
+   - **NEVER duplicate or redefine types in React components or other files**
+
+2. **Implement Server Logic** ([/src/apis/<domain>/server.ts](mdc:src/apis))
+   - Create a `process` function that handles the request and returns a response
+   - **IMPORTANT: ALL business logic MUST be implemented here**
+   - Handle all business logic, validation, error cases, and external API calls here
+   - **MUST use the shared types for both input parameters and return values**
+   - **NEVER import any client-side code or client.ts functions here**
+   - **IMPORTANT: MUST re-export the API name from index.ts**
+
+3. **Create Client Function** ([/src/apis/<domain>/client.ts](mdc:src/apis))
+   - Implement a function that calls the API using the apiClient.call method
+   - **IMPORTANT: This is the ONLY place that should call apiClient.call with this API name**
+   - **MUST use the exact same types for input parameters and return values as server.ts**
+   - **NEVER import any server-side code or server.ts functions here**
+   - **ALWAYS wrap the response type with CacheResult<T> to handle caching metadata**
+   - **IMPORTANT: MUST import the API name from index.ts, NEVER from server.ts**
+
+4. **Create Index File** ([/src/apis/<domain>/index.ts](mdc:src/apis))
+   - Export ONLY the API name and types (not process or client functions)
+   - **IMPORTANT: Do NOT export process or client functions to prevent bundling server code with client code**
+
+5. **Register the API in apis.ts** ([/src/apis/apis.ts](mdc:src/apis/apis.ts))
+   - Import the server module directly and add it to the apiHandlers object
+   - **IMPORTANT: Import directly from server.ts, NOT from index.ts**
+   - **IMPORTANT: The key in the apiHandlers object MUST match the name exported from the server.ts**
+
+## Multiple API Routes Under the Same Namespace
+
+When a domain needs to expose multiple API routes (e.g., search and details), follow these guidelines:
+
+1. **Define All API Names in index.ts**
+2. **Re-export API Names from server.ts**
+3. **Import API Names in client.ts FROM INDEX.TS, NOT server.ts**
+4. **Register Multiple Endpoints in apis.ts**
+
+This approach provides several benefits:
+- Clear organization of related API endpoints under a common namespace
+- Explicit and self-documenting API names
+- Type safety for each endpoint's request and response
+- Separation of concerns with dedicated handler functions
+- Consistent client-side access pattern
+
+**CRITICAL: The client code must NEVER import directly from server.ts**
+- API names MUST be defined in index.ts
+- Server.ts MUST re-export API names from index.ts 
+- Client.ts MUST import API names from index.ts
+- This pattern ensures client code never imports server code directly
+- Importing server code directly in client code will BREAK the application
+
+## Important Guidelines
+
+1. **Single API Endpoint**:
+   - **NEVER add new Next.js API routes to the /src/pages/api folder**
+   - All API requests go through the single /api/process endpoint
+   - The central processApiCall.ts handles routing to the correct API handler
+
+2. **API Registration and Naming Flow**:
+   - **ALWAYS register new APIs in apis.ts by importing directly from server.ts**
+   - The API name flow MUST follow this pattern:
+     1. DEFINE API names in index.ts
+     2. IMPORT and RE-EXPORT API names in server.ts from index.ts
+     3. IMPORT API names in apis.ts from server.ts
+     4. IMPORT API names in client.ts from index.ts (NEVER from server.ts)
+   - This pattern ensures client code never imports server code directly
+
+3. **Client Access**:
+   - **NEVER call apiClient directly from components or pages**
+   - **ALWAYS use the domain-specific client functions** (e.g., chatWithAI)
+   - **ALWAYS import client functions directly from client.ts, not from index.ts**
+   - This ensures proper typing and consistent error handling
+
+4. **Caching**:
+   - Caching is automatically applied at the processApiCall.ts level
+   - **ALWAYS wrap response types with CacheResult<T> in client functions**
+
+5. **Error Handling**:
+   - Never return non-200 status codes from API routes
+   - Always return status code 200 with proper error fields in the response
+   - Handle all errors gracefully in the process function
+
+6. **Type Safety**:
+   - **CRITICAL: Ensure perfect type consistency across the entire API flow**
+   - The client.ts function MUST use the exact same parameter types as server.ts
+   - The return type in client.ts should be CacheResult<ResponseType>
+   - Never use `any` as a type
+   - **ALWAYS define domain-related types in types.ts and import them where needed**
+   - **NEVER duplicate types in components or other files**
+   - **NEVER create similar but slightly different versions of the same type**
+
+7. **Separation of Concerns**:
+   - **NEVER import server.ts in client-side code**
+   - **NEVER import client.ts in server-side code**
+   - **NEVER export process function from index.ts**
+   - **NEVER export client functions from index.ts**
+   - This prevents bundling server-side code with client-side code
+   - Keep business logic in server.ts and API calls in client.ts

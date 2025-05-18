@@ -1,6 +1,9 @@
+// Import the API types
 export * from './types';
 
-export const name = "mongodb";
+// API names - these must all be exported here
+export const name = 'mongodb';
+export const databasesApiName = `${name}/databases`;
 export const collectionsApiName = `${name}/collections`;
 export const documentsApiName = `${name}/documents`;
 export const modifyDocumentApiName = `${name}/modifyDocument`;

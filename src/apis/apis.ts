@@ -4,7 +4,7 @@ import * as clearCache from "./settings/clearCache/server";
 import * as fileManagement from "./fileManagement/server";
 import * as aiUsage from "./monitoring/aiUsage/server";
 import * as mongodb from "./mongodb/server";
-import { DocumentsRequest, ModifyDocumentRequest, QueryRequest, StatsRequest, AIQueryRequest } from "./mongodb/types";
+import { CollectionsRequest, DocumentsRequest, ModifyDocumentRequest, QueryRequest, StatsRequest, AIQueryRequest } from "./mongodb/types";
 
 
 export const apiHandlers: ApiHandlers = {
@@ -13,7 +13,13 @@ export const apiHandlers: ApiHandlers = {
   [fileManagement.name]: { process: fileManagement.process as (params: unknown) => Promise<unknown> },
   [aiUsage.all]: { process: aiUsage.getAllUsage as (params: unknown) => Promise<unknown> },
   [aiUsage.summary]: { process: aiUsage.getSummary as (params: unknown) => Promise<unknown> },
-  [mongodb.collectionsApiName]: { process: () => mongodb.getCollections() },
+  [mongodb.databasesApiName]: { process: () => mongodb.getDatabases() },
+  [mongodb.collectionsApiName]: {
+    process: (params: unknown) => {
+      const { database } = (params as CollectionsRequest);
+      return mongodb.getCollections(database);
+    }
+  },
   [mongodb.documentsApiName]: { process: (params: unknown) => mongodb.getDocuments(params as DocumentsRequest) },
   [mongodb.modifyDocumentApiName]: { process: (params: unknown) => mongodb.modifyDocument(params as ModifyDocumentRequest) },
   [mongodb.queryApiName]: { process: (params: unknown) => mongodb.executeCustomQuery(params as QueryRequest) },

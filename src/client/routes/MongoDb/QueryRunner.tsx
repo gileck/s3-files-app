@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
-    Box, Paper, TextField, Button, CircularProgress,
+    Box, TextField, Button, CircularProgress,
     Alert, Chip, Tooltip, Collapse, List, ListItem, ListItemText, ListItemIcon,
-    IconButton
+    IconButton, Paper
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -13,7 +13,10 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useAIQuery } from '../../hooks/useAIQuery';
 
 interface QueryRunnerProps {
-    collection: string;
+    collection?: string;
+    database?: string;
+    loading?: boolean;
+    error?: Error | null;
     onRunQuery: (query: string) => void;
 }
 
@@ -83,7 +86,13 @@ const deleteSavedQuery = (collection: string, index: number): StoredQuery[] => {
     }
 };
 
-export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
+export const QueryRunner = ({
+    collection,
+    database,
+    loading: externalLoading,
+    error: externalError,
+    onRunQuery
+}: QueryRunnerProps) => {
     const [queryInput, setQueryInput] = useState('{}');
     const [naturalLanguageInput, setNaturalLanguageInput] = useState('');
     const [showPastQueries, setShowPastQueries] = useState(false);
@@ -91,9 +100,24 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
     const [queryError, setQueryError] = useState<Error | null>(null);
     const { query: aiGeneratedQuery, loading: aiLoading, error: aiError, cost: aiCost, generateQuery } = useAIQuery();
 
+    // Log AI Query Hook status changes
+    useEffect(() => {
+        console.log('[QueryRunner] AI Hook Status:', { aiLoading, aiError, aiCost });
+    }, [aiLoading, aiError, aiCost]);
+
+    // Reset inputs when database or collection changes
+    useEffect(() => {
+        setNaturalLanguageInput('');
+        setQueryInput('{}');
+        setQueryError(null); // Also clear any previous query error
+        // setShowPastQueries(false); // Optionally hide past queries as they are collection-specific
+    }, [database, collection]);
+
     // Load saved queries on component mount and when collection changes
     useEffect(() => {
-        setSavedQueries(getSavedQueries(collection));
+        if (collection) {
+            setSavedQueries(getSavedQueries(collection));
+        }
     }, [collection]);
 
     const handleRunQuery = () => {
@@ -106,10 +130,11 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
             onRunQuery(queryInput);
 
             // Save the query to localStorage after running it
-            saveQueryToLocalStorage(collection, queryInput);
-
-            // Refresh the saved queries list
-            setSavedQueries(getSavedQueries(collection));
+            if (collection) {
+                saveQueryToLocalStorage(collection, queryInput);
+                // Refresh the saved queries list
+                setSavedQueries(getSavedQueries(collection));
+            }
         } catch (err) {
             setQueryError(err instanceof Error ? err : new Error(String(err)));
         }
@@ -125,20 +150,32 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
     };
 
     const handleGenerateAIQuery = async () => {
-        await generateQuery(collection, naturalLanguageInput);
+        setQueryError(null); // Clear previous JSON query errors
+        if (collection && naturalLanguageInput) {
+            try {
+                await generateQuery(collection, naturalLanguageInput, database);
+            } catch (err) {
+                console.error('[QueryRunner] Error during generateQuery call:', err);
+            }
+        } else {
+            console.warn('[QueryRunner] Skipping AI query generation: collection or naturalLanguageInput is missing.');
+        }
     };
 
     // When AI generates a query, automatically update the main query input and run it
     useEffect(() => {
-        if (aiGeneratedQuery) {
+        console.log('[QueryRunner] AI Generated Query Effect: Received aiGeneratedQuery:', aiGeneratedQuery);
+        if (aiGeneratedQuery && collection) {
             setQueryInput(aiGeneratedQuery);
             // Automatically run the generated query
             try {
                 JSON.parse(aiGeneratedQuery);
+                console.log('[QueryRunner] Parsed AI query successfully, running query:', aiGeneratedQuery);
                 onRunQuery(aiGeneratedQuery);
                 saveQueryToLocalStorage(collection, aiGeneratedQuery);
                 setSavedQueries(getSavedQueries(collection));
             } catch (err) {
+                console.error('[QueryRunner] Error processing AI generated query:', err, { aiGeneratedQuery });
                 setQueryError(err instanceof Error ? err : new Error(String(err)));
             }
         }
@@ -156,8 +193,10 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
     };
 
     const handleDeleteQuery = (index: number) => {
-        const updatedQueries = deleteSavedQuery(collection, index);
-        setSavedQueries(updatedQueries);
+        if (collection) {
+            const updatedQueries = deleteSavedQuery(collection, index);
+            setSavedQueries(updatedQueries);
+        }
     };
 
     // Format date for display
@@ -166,42 +205,24 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
     };
 
     return (
-        <Box>
+        <Box sx={{ mb: 3 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {/* Natural Language Query Input */}
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                    <TextField
-                        label="Natural Language Query"
-                        fullWidth
-                        size="small"
-                        value={naturalLanguageInput}
-                        onChange={(e) => setNaturalLanguageInput(e.target.value)}
-                        placeholder="Example: Find all documents with a specific ID"
-                        variant="outlined"
-                    />
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        size="small"
-                        startIcon={aiLoading ? <CircularProgress size={16} /> : <SmartToyIcon />}
-                        onClick={handleGenerateAIQuery}
-                        disabled={aiLoading || !naturalLanguageInput}
-                        sx={{ whiteSpace: 'nowrap', minWidth: '140px' }}
-                    >
-                        Generate
-                    </Button>
-                    <Button
-                        variant={showPastQueries ? "contained" : "outlined"}
-                        size="small"
-                        startIcon={<HistoryIcon />}
-                        onClick={() => setShowPastQueries(!showPastQueries)}
-                        sx={{ whiteSpace: 'nowrap', minWidth: '100px' }}
-                    >
-                        History
-                    </Button>
-                </Box>
+                <TextField
+                    label="Natural Language Query"
+                    fullWidth
+                    size="small"
+                    value={naturalLanguageInput}
+                    onChange={(e) => setNaturalLanguageInput(e.target.value)}
+                    placeholder="Example: Find users by email or status"
+                    variant="outlined"
+                    sx={{
+                        backgroundColor: '#F9FAFB',
+                        '& .MuiOutlinedInput-root': {
+                            borderRadius: '8px',
+                        }
+                    }}
+                />
 
-                {/* Cost display for AI query */}
                 {aiCost && (
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: -1 }}>
                         <Tooltip title="Cost of this AI query generation">
@@ -214,17 +235,155 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
                         </Tooltip>
                     </Box>
                 )}
-
-                {/* AI Error */}
                 {aiError && (
-                    <Alert severity="error" sx={{ mb: 2 }}>
+                    <Alert severity="error" sx={{ mb: 1 }}>
                         {aiError.message || 'Failed to generate query'}
                     </Alert>
                 )}
 
-                {/* Query History */}
-                <Collapse in={showPastQueries}>
-                    <Paper variant="outlined" sx={{ p: 1, maxHeight: '200px', overflow: 'auto' }}>
+                <Box>
+                    <Box sx={{
+                        color: "rgba(0, 0, 0, 0.6)",
+                        fontSize: "0.75rem",
+                        padding: "0 8px",
+                        position: "relative",
+                        top: "-10px",
+                        left: "10px",
+                        backgroundColor: "#FAFAFA",
+                        zIndex: 1,
+                        fontFamily: '"Roboto","Helvetica","Arial",sans-serif',
+                        fontWeight: 400,
+                        lineHeight: 1.4375,
+                        letterSpacing: "0.00938em",
+                        display: 'inline-block'
+                    }}>
+                        MongoDB Query (JSON)
+                    </Box>
+                    <Box
+                        sx={{
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '8px',
+                            p: 1.5,
+                            backgroundColor: '#F3F4F6',
+                            minHeight: 90,
+                            fontFamily: 'monospace',
+                            fontSize: '14px',
+                            color: '#1F2937',
+                            position: 'relative',
+                            mt: -2.5
+                        }}
+                    >
+                        <TextField
+                            fullWidth
+                            multiline
+                            variant="standard"
+                            InputProps={{
+                                disableUnderline: true,
+                                sx: {
+                                    p: 0,
+                                    fontFamily: 'monospace',
+                                    fontSize: '14px',
+                                    color: '#1F2937',
+                                    minHeight: 60
+                                }
+                            }}
+                            value={queryInput}
+                            onChange={(e) => setQueryInput(e.target.value)}
+                            placeholder='{"field": "value"}'
+                            error={!!queryError}
+                            helperText={queryError ? queryError.message : ' '}
+                            sx={{
+                                '& .MuiFormHelperText-root': {
+                                    position: 'absolute',
+                                    bottom: -20,
+                                    left: 0,
+                                    fontFamily: '"Roboto","Helvetica","Arial",sans-serif',
+                                    fontSize: '0.7rem'
+                                }
+                            }}
+                        />
+                    </Box>
+                </Box>
+
+                <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mt: 2 }}>
+                    <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={aiLoading ? <CircularProgress size={16} color="inherit" /> : <SmartToyIcon />}
+                        onClick={handleGenerateAIQuery}
+                        disabled={aiLoading || !naturalLanguageInput}
+                        sx={{
+                            whiteSpace: 'nowrap',
+                            bgcolor: '#E0E0E0',
+                            color: '#1F2937',
+                            height: '36px',
+                            borderRadius: '8px',
+                            px: 2,
+                            textTransform: 'none',
+                            fontSize: '14px',
+                            '&:hover': { bgcolor: '#d5d5d5' }
+                        }}
+                    >
+                        Generate
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        startIcon={<HistoryIcon />}
+                        onClick={() => setShowPastQueries(!showPastQueries)}
+                        sx={{
+                            whiteSpace: 'nowrap',
+                            height: '36px',
+                            borderRadius: '8px',
+                            borderColor: '#2563EB',
+                            color: '#2563EB',
+                            px: 2,
+                            textTransform: 'none',
+                            fontSize: '14px',
+                            '&:hover': { bgcolor: 'rgba(37, 99, 235, 0.04)' }
+                        }}
+                    >
+                        History
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleRunQuery}
+                        startIcon={<PlayArrowIcon />}
+                        sx={{
+                            borderRadius: '8px',
+                            textTransform: 'none',
+                            height: '36px',
+                            bgcolor: '#2563EB',
+                            fontSize: '14px',
+                            px: 2,
+                            '&:hover': { bgcolor: '#1D4ED8' }
+                        }}
+                    >
+                        Run Query
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        onClick={handleResetQuery}
+                        startIcon={<RestartAltIcon />}
+                        sx={{
+                            borderRadius: '8px',
+                            textTransform: 'none',
+                            height: '36px',
+                            borderColor: '#DC2626',
+                            color: '#DC2626',
+                            fontSize: '14px',
+                            px: 2,
+                            '&:hover': { bgcolor: 'rgba(220, 38, 38, 0.04)' }
+                        }}
+                    >
+                        Reset Query
+                    </Button>
+                </Box>
+
+                <Collapse in={showPastQueries} sx={{ mt: 2, width: '100%' }}>
+                    <Paper variant="outlined" sx={{ p: 1, maxHeight: '200px', overflow: 'auto', borderColor: '#E5E7EB' }}>
                         {savedQueries.length === 0 ? (
                             <Alert severity="info" sx={{ mb: 0 }}>
                                 No saved queries
@@ -242,34 +401,37 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
                                                 aria-label="delete"
                                                 size="small"
                                                 onClick={() => handleDeleteQuery(index)}
+                                                sx={{ color: '#6B7280' }}
                                             >
                                                 <DeleteIcon fontSize="small" />
                                             </IconButton>
                                         }
                                         sx={{
                                             cursor: 'pointer',
-                                            '&:hover': { backgroundColor: '#f0f0f0' },
-                                            py: 0.5
+                                            '&:hover': { backgroundColor: '#F3F4F6' },
+                                            py: 0.5,
+                                            borderRadius: '4px'
                                         }}
                                         onClick={() => handleSelectQuery(savedQuery.query)}
                                     >
-                                        <ListItemIcon sx={{ minWidth: '30px' }}>
+                                        <ListItemIcon sx={{ minWidth: '30px', color: '#6B7280' }}>
                                             <CodeIcon fontSize="small" />
                                         </ListItemIcon>
                                         <ListItemText
                                             primary={
                                                 <Box sx={{
                                                     fontFamily: 'monospace',
-                                                    fontSize: '0.85rem',
+                                                    fontSize: '14px',
                                                     whiteSpace: 'nowrap',
                                                     overflow: 'hidden',
-                                                    textOverflow: 'ellipsis'
+                                                    textOverflow: 'ellipsis',
+                                                    color: '#1F2937'
                                                 }}>
                                                     {savedQuery.query}
                                                 </Box>
                                             }
                                             secondary={formatDate(savedQuery.timestamp)}
-                                            secondaryTypographyProps={{ fontSize: '0.7rem' }}
+                                            secondaryTypographyProps={{ fontSize: '12px', color: '#6B7280' }}
                                         />
                                     </ListItem>
                                 ))}
@@ -277,44 +439,6 @@ export const QueryRunner = ({ collection, onRunQuery }: QueryRunnerProps) => {
                         )}
                     </Paper>
                 </Collapse>
-
-                {/* MongoDB Query Input */}
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                    <TextField
-                        label="MongoDB Query (JSON)"
-                        fullWidth
-                        multiline
-                        rows={2}
-                        value={queryInput}
-                        onChange={(e) => setQueryInput(e.target.value)}
-                        placeholder='{"field": "value"}'
-                        variant="outlined"
-                        error={!!queryError}
-                        helperText={queryError?.message}
-                    />
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            size="small"
-                            startIcon={<PlayArrowIcon />}
-                            onClick={handleRunQuery}
-                            sx={{ whiteSpace: 'nowrap', minWidth: '140px' }}
-                        >
-                            Run Query
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            color="secondary"
-                            size="small"
-                            startIcon={<RestartAltIcon />}
-                            onClick={handleResetQuery}
-                            sx={{ whiteSpace: 'nowrap', minWidth: '140px' }}
-                        >
-                            Reset Query
-                        </Button>
-                    </Box>
-                </Box>
             </Box>
         </Box>
     );
