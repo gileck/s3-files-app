@@ -73,10 +73,17 @@ export const DocumentsTable = ({
 
     const columns = useMemo(() => {
         if (!documents || documents.length === 0) return [];
-        const firstDoc = documents[0];
-        if (!firstDoc || typeof firstDoc !== 'object') return [];
-        const fields = Object.keys(firstDoc).filter(key => key !== '_id');
-        return fields.slice(0, 5);
+        const allFields = new Set<string>();
+        documents.forEach(doc => {
+            if (doc && typeof doc === 'object') {
+                Object.keys(doc).forEach(key => {
+                    if (key !== '_id') {
+                        allFields.add(key);
+                    }
+                });
+            }
+        });
+        return Array.from(allFields).slice(0, 10);
     }, [documents]);
 
     const handleChangePage = (_: unknown, newPage: number) => {
